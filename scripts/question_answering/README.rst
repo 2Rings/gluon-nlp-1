@@ -1,0 +1,2 @@
+Implement QANET: COMBINING LOCAL CONVOLUTION WITH GLOBAL SELF-ATTENTION FOR READING COMPREHENSION https://openreview.net/pdf?id=B14TlG-RW
+==========================================================================================================================================
