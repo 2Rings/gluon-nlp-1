@@ -6,6 +6,7 @@ from gluonnlp.data import SpacyTokenizer
 from gluonnlp.data import CorpusDataset
 from gluonnlp.data import count_tokens
 
+#This script aims at preprocessing raw data into the format that can be the input for transform.py
 dm_single_close_quote = u'\u2019'
 dm_double_close_quote = u'\u201d'
 END_TOKENS = ['.','!','?','...', "'", "`", '"', dm_single_close_quote, dm_double_close_quote, ")"]
@@ -22,7 +23,6 @@ chunk_dir = os.path.join(finished_files_dir, "chunked")
 num_expected_cnn_stories = 92579
 num_expected_dm_stories = 219506
 
-VOCAB_SIZE = 200000
 CHUNK_SIZE = 1000
 
 SOS = '<s>'

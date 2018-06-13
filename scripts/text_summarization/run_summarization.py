@@ -108,12 +108,33 @@ def run_train():
             art_valid_length = art_valid_length.as_in_context(ctx)
             abs_valid_length = abs_valid_length.as_in_context(ctx)
             with mx.autograd.record():
-                out, _ = model(art_seq, abs_seq[:, :-1], art_valid_length, abs_valid_length - 1)
+                #out should be our prediction with shape
+                decoder_states = model(art_seq, abs_seq[:, :-1], art_valid_length, abs_valid_length - 1)
+                vocab_scores = []
+                for i, output in enumerate(decoder_outputs):
+                    # V'(V[St,ht*]+b)+b'
+                    #shape(batch_size, Vsize)
+                    vocab_score = linear(output, weight, b)
+                    vocab_scores.append(vocab_score)
+                #vocab_dists: shape(length, batch_size, vsize)
+                vocab_dists = [mx.nd.softmax(v_s) for v_s in vocab_scores]
+                batch_num = mx.nd.arange(batch_size, dtype = int)
+                loss_per_step = []
+                for dec_step, dist in enumerate(vocab_dists):
+                    targets = mx.nd.array(self.abs_seq[:,dec_step], dtype = int)
+                    indices = mx.nd.stack((batch_num, targets), axis = 1)
+                    gold_probs = mx.nd.gather_nd(dist, indices)
+                    loss = -mx.nd.log(gold_probs)
+                    loss_per_step.append(loss)
+
+                loss = sum(loss_per_step)/abs_valid_length
+                loss = self._loss.mean()
+                loss.backward()
                 # TODO
                 # Loss Function
-                loss = loss_function(out, abs_seq[:, 1:], abs_valid_length - 1).mean()
-                loss = loss * (abs_seq.shape[1] - 1) / (abs_valid_length - 1).mean()
-                loss.backward()
+                # loss = loss_function(out, abs_seq[:, 1:], abs_valid_length - 1).mean()
+                # loss = loss * (abs_seq.shape[1] - 1) / (abs_valid_length - 1).mean()
+                # loss.backward()
 
             grads = [p.grad(ctx) for p in model.collect_params().values]
             gnorm = gluon.utils.clip_global_norm(grads, args.clip)
