@@ -15,6 +15,7 @@ from gluonnlp.data import CorpusDataset
 from gluonnlp.data import count_tokens
 from mxnet.gluon.data import ArrayDataset, SimpleDataset
 from mxnet.gluon.data import DataLoader
+from transform import TrainValDataTransform
 
 import transform
 
@@ -36,6 +37,7 @@ parser.add_argument('--vocab_size', type = int, default = 50000, help = 'Size of
 parser.add_argument('--optimizer', type = str, default = 'adam', help = 'Optimization Algorithm')
 parser.add_argument('--lr', type = float, default = 0.15, help = 'Learning rate')
 parser.add_argument('--bucket_ratio', type = float, default = 0.0, help = 'bucket_ratio')
+parser.add_argument('--num_buckets', type = int, default = 8, help = 'bucket number')
 args = parser.parse_args()
 print(args)
 data_path = args.dataset
@@ -45,17 +47,21 @@ val_path = os.path.join(data_path, "val.story")
 test_path = os.path.join(data_path, "test.stroy")
 
 
-train_data, vocab = transform.trans(train_data, makevocab = True)
-val_data = transform.trans(val_path)
-test_data = transform.trans(test_path)
+# train_data, train_data2idx, my_vocab = transform.trans(train_data, makevocab = True)
+# val_data, val_data2idx, _ = transform.trans(val_path, vocab = my_vocab)
+# test_data, test_data2idx, _ = transform.trans(test_path, vocab = my_vocab)
+
+train_data, train_data2idx, my_vocab = TrainValDataTransform(train_data, args.max_enc_steps, args.max_dec_steps, makevocab = True)
+val_data, val_data2idx, _ = TrainValDataTransform(val_path, args.max_enc_steps, args.max_dec_steps, vocab = my_vocab)
+test_data, test_data2idx, _ = TrainValDataTransform(test_path, args.max_enc_steps, args.max_dec_steps, vocab = my_vocab)
 
 train_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(len[1])) for i, ele in enumerate(train_data)])
 val_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(len[1]), i) for i, ele in enumerate(val_data)])
 test_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(len[1]), i) for i, ele in enumerate(test_data)])
 
 
-loss_function = SoftmaxCEMaskedLoss()
-loss_function.hybridize()
+# loss_function = SoftmaxCEMaskedLoss()
+# loss_function.hybridize()
 
 def run_train():
     trainer = gluon.Trainer(model.collect_params(), args.optimizer, {'learning_rate':args.lr})
@@ -98,10 +104,6 @@ def run_train():
                                     num_workers=8)
 
     for epoch_id in range(args.epochs):
-        log_avg_loss = 0
-        log_avg_gnorm = 0
-        log_wc = 0
-        log_start_time = time.time()
         for batch_id, (art_seq, abs_seq, art_valid_length, abs_valid_length) in enumerate(train_data_loader):
             art_seq = art_seq.as_in_context(ctx)
             abs_seq = abs_seq.as_in_context(ctx)
@@ -130,11 +132,7 @@ def run_train():
                 loss = sum(loss_per_step)/abs_valid_length
                 loss = self._loss.mean()
                 loss.backward()
-                # TODO
-                # Loss Function
-                # loss = loss_function(out, abs_seq[:, 1:], abs_valid_length - 1).mean()
-                # loss = loss * (abs_seq.shape[1] - 1) / (abs_valid_length - 1).mean()
-                # loss.backward()
+
 
             grads = [p.grad(ctx) for p in model.collect_params().values]
             gnorm = gluon.utils.clip_global_norm(grads, args.clip)
