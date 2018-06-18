@@ -13,38 +13,40 @@ embd_source = 'glove.6B.50d.txt'
 
 class TrainValDataTransform(object):
 
-    def __init__(self, dataset, max_enc_steps, max_dec_steps, vocab = None, makevocab = False, embedding_type = 'glove', source = 'glove.6B.50d.txt'):
-        self._data = dataset
-        self._vocab = vocab
-        self._makevocab = makevocab
+    def __init__(self, max_enc_steps, max_dec_steps, embedding_type = 'glove', source = 'glove.6B.50d.txt'):
         self._embedding_type = embedding_type
         self._source = source
         self._max_enc_step = max_enc_steps
         self._max_dec_step = max_dec_steps
 
-    def __call__(self):
-        return self.trans()
+    def __call__(self, dataset, makevocab):
+        if makevocab:
+            return self.trans(dataset, makevocab)
+        else:
+            return self.trans(dataset)
 
     def get_embedding(self):
         return gluonnlp.embedding.create(self._embedding_type, self._source)
 
-    def build_vocab(self):
+    def build_vocab(self, dataset):
         # Builidding vocabulary
         # my_vocab: embedding, idx_to_token, reserved_token, token_to_idx, unknown_token, padding_token, bos_token, eos_token
-        # start = time.time()
-        data =  CorpusDataset(self._data, tokenizer = SpacyTokenizer())
+        start = time.time()
+        data =  CorpusDataset(dataset, tokenizer = SpacyTokenizer())
         vocab_counter = count_tokens("")
-        vocab_counter = count_tokens(data,counter = vocab_counter)
-        my_vocab = gluonnlp.Vocab(vocab_counter)
-        embd = get_embedding()
-        my_vocab = my_vocab.set_embedding(embd)
+        for line in data:
+            vocab_counter = count_tokens(line, counter = vocab_counter)
 
+        end = time.time()
 
-        return my_vocab
+        print('Building vocabulary spent: {}'.format(end - start))
 
-    def trans():
+        return vocab_counter
+
+    def trans(self, dataset, makevocab = False):
+
         if makevocab:
-            my_vocab = build_vocab()
+            my_vocab = build_vocab(dataset)
 
         with open(data, 'r') as f:
             lines = f.readlines()
@@ -65,8 +67,3 @@ class TrainValDataTransform(object):
         data_idx = ArrayDataset(art2idx, abs2idx)
 
         return data, data_idx, my_vocab
-
-
-# def process_dataset(dataset, vocab):
-#     start = time.time()
-#     pass

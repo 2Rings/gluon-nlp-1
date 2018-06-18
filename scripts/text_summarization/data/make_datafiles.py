@@ -15,16 +15,11 @@ all_train_urls = "url_lists/all_train.txt"
 all_val_urls = "url_lists/all_val.txt"
 all_test_urls = "url_lists/all_val.txt"
 finished_files_dir = "finished_files"
+
 num_expected_cnn_stories = 92579
 num_expected_dm_stories = 219506
 BOS = '<s>'
 EOS = '</s>'
-# cnn_tokenized_stories_dir = "cnn_stories_tokenized"
-# dm_tokenized_stories_dir = "dm_stories_tokenized"
-# chunk_dir = os.path.join(finished_files_dir, "chunked")
-
-# CHUNK_SIZE = 1000
-
 
 def read_text_file(text_file):
     lines = []
@@ -80,12 +75,11 @@ def write2file(url_file, out_file):
     story_fnames = [s+".story" for s in url_hashes]
     num_stories = len(story_fnames)
 
-    # if makevocab:
-    #     vocab_counter = count_tokens("")
     outname = os.path.join(out_file, '.txt')
     with open(outname, 'at') as writer:
         for idx, s in enumerate(story_fnames):
 
+            #check file
             if os.path.isfile(os.path.join(cnn_stories_dir,s)):
                 story_file = os.path.join(cnn_stories_dir, s)
             elif os.path.isfile(os.path.join(dm_stories_dir,s)):
@@ -95,23 +89,12 @@ def write2file(url_file, out_file):
                 check_num_stories(dm_stories_dir, num_expected_dm_stories)
                 raise Exception("Error")
 
-
+            #getting art-abs pair
             article, abstract = get_art_abs(story_file)
 
-            # if makevocab:
-            #     vocab_counter(article, counter = vocab_counter)
-            #     vocab_counter(abstract, counter = vocab_counter)
+            #store in one file
+            writer.write(' '.join(article) + '\t' + ' '.join(abstract) + '\n')
 
-                writer.write(' '.join(article) + '\t' + ' '.join(abstract) + '\n')
-                # writer.write(str(idx) + '\t' + ' '.join(article) + '\t' + ' '.join(abstract) + '\n')
-                # writer.write(article + '\n')
-                # writer.write("abstract:\n")
-                # writer.write(abstract + '\n')
-
-            # cnt += 1
-
-    # if makevocab:
-    #     return vocab_counter
 
 
 if __name__ == '__main__':
@@ -121,55 +104,8 @@ if __name__ == '__main__':
     check_num_stories(cnn_stories_dir, num_expected_cnn_stories)
     check_num_stories(dm_stories_dir, num_expected_dm_stories)
 
-    # if not os.path.exists(cnn_tokenized_stories_dir): os.makedirs(cnn_tokenized_stories_dir)
-    # if not os.path.exists(dm_tokenized_stories_dir): os.makedirs(dm_tokenized_stories_dir)
     if not os.path.exists(finished_files_dir): os.makedirs(finished_files_dir)
-
-    # tokenize_stories(cnn_stories_dir, cnn_tokenized_stories_dir)
-    # tokenize_stories(dm_stories_dir, dm_tokenized_stories_dir)
 
     write2file(all_train_urls, os.path.join(finished_files_dir, "train.txt"))
     wrtie2file(all_val, os.path.join(finished_files_dir, "val.txt"))
     wrtie2file(all_test, os.path.join(finished_files_dir, "test.txt"))
-
-
-
-# NotImplemented
-# def check_num_stories(stories_dir, num_expected):
-#     num_stories = len(os.listdir(stories_dir))
-#     if num_stories != num_expected:
-#         raise Exception("Error")
-
-
-# def stories2pair(stories_dir, data_pair_dir):
-#     stories = os.listdir(stories_dir)
-#     for s in stories:
-#         if s == '.DS_Store':
-#             continue
-#         in_path = os.path.join(stories_dir, s)
-#         out_path = os.path.join(data_pair_dir, s)
-#
-#         article, abstract = get_art_abs(in_path)
-#
-#         with open(out_path, 'w') as w:
-
-# def tokenize_stories(stories_dir, tokenize_stories_dir):
-#     stories = os.listdir(infile)
-#     cnt = 0
-#     for s in stories:
-#         if s == '.DS_Store':
-#             continue
-#         in_path = os.path.join(infile,s)
-#         out_path = os.path.join(outfile, s)
-#         tokens = CorpusDataset(in_path, tokenizer = SpacyTokenizer())
-#
-#         with open(out_path, 'w') as w:
-#             for tk in tokens:
-#                 w.write(' '.join(tk) + '\n')
-#
-#     num_orig = len(os.listdir(stories_dir))
-#     num_tokenized = len(os.listdir(tokenize_stories_dir))
-#
-#     if num_orig != num_tokenized:
-#         raise Exception("The tokenized stories directory %s contains %i files, but it should contain the same number as %s (which has %i files). Was there an error during tokenization?" % (tokenized_stories_dir, num_tokenized, stories_dir, num_orig))
-#     print "Successfully finished tokenizing %s to %s.\n" % (stories_dir, tokenized_stories_dir)

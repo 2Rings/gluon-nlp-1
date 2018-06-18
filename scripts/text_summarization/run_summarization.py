@@ -16,6 +16,7 @@ from gluonnlp.data import count_tokens
 from mxnet.gluon.data import ArrayDataset, SimpleDataset
 from mxnet.gluon.data import DataLoader
 from transform import TrainValDataTransform
+from loss import SequenceLoss
 
 import transform
 
@@ -38,30 +39,76 @@ parser.add_argument('--optimizer', type = str, default = 'adam', help = 'Optimiz
 parser.add_argument('--lr', type = float, default = 0.15, help = 'Learning rate')
 parser.add_argument('--bucket_ratio', type = float, default = 0.0, help = 'bucket_ratio')
 parser.add_argument('--num_buckets', type = int, default = 8, help = 'bucket number')
+parser.add_argument('--gpu', type = int, default = None, help = 'id of the gpu to use. Set it to empty means to use cpu.')
 args = parser.parse_args()
 print(args)
+
 data_path = args.dataset
 
 train_path = os.path.join(data_path, "train.story")
 val_path = os.path.join(data_path, "val.story")
 test_path = os.path.join(data_path, "test.stroy")
 
+data_transform = TrainValDataTransform(max_enc_steps= args.max_enc_steps=, max_dec_steps= args.max_dec_steps)
 
-# train_data, train_data2idx, my_vocab = transform.trans(train_data, makevocab = True)
-# val_data, val_data2idx, _ = transform.trans(val_path, vocab = my_vocab)
-# test_data, test_data2idx, _ = transform.trans(test_path, vocab = my_vocab)
-
-train_data, train_data2idx, my_vocab = TrainValDataTransform(train_data, args.max_enc_steps, args.max_dec_steps, makevocab = True)
-val_data, val_data2idx, _ = TrainValDataTransform(val_path, args.max_enc_steps, args.max_dec_steps, vocab = my_vocab)
-test_data, test_data2idx, _ = TrainValDataTransform(test_path, args.max_enc_steps, args.max_dec_steps, vocab = my_vocab)
+train_data, train_data2idx, my_vocab = data_transform(dataset = train_data, makevocab = True)
+val_data, val_data2idx = data_transform(dataset = val_path, vocab = my_vocab)
+test_data, test_data2idx = data_transform(dataset = test_path, vocab = my_vocab)
 
 train_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(len[1])) for i, ele in enumerate(train_data)])
 val_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(len[1]), i) for i, ele in enumerate(val_data)])
 test_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(len[1]), i) for i, ele in enumerate(test_data)])
 
+if args.gpu is None:
+    ctx = mx.cpu()
+    print('Use CPU')
+else:
+    ctx = mx.gpu(args.gpu)
 
-# loss_function = SoftmaxCEMaskedLoss()
-# loss_function.hybridize()
+encoder, decoder = get_summ_encoder_decoder(hidden_size = args.num_hidden)
+
+model = SummarizationModel(vocab = my_vocab, encoder = encoder, decoder = decoder, embed_size = args.embedding_dim, prefix = 'summary_')
+
+loss_function = SequenceLoss(valid_length= abs_valid_length, vocab_size = args.vocab_size)
+loss_function.hybridize()
+
+model.initialize(init = mx.init.Uniform(0.1), ctx = ctx)
+model.hybridize()
+
+# TODO: Summarizer
+
+def linear():
+    pass
+
+def evaluate(data_loader):
+    summary_out = []
+    all_inst_ids = []
+    avg_loss_denom = 0
+    avg_loss = 0.0
+    for _, (art_seq, abs_seq, art_valid_length, abs_valid_length, inst_ids) in enumerate(data_loader):
+        art_seq = art_seq.as_in_context(ctx)
+        abs_seq = abs_seq.as_in_context(ctx)
+        art_valid_length = art_valid_length.as_in_context(ctx)
+        abs_valid_length = abs_valid_length.as_in_context(ctx)
+
+        #Calculating Loss
+        out = model(art_seq, abs_seq[:, :-1], art_valid_length, abs_valid_length - 1)
+        loss = loss_function(out)
+        all_inst_ids.extend(inst_ids.asnumpy().astype(np.int32).tolist())
+        avg_loss += loss * (abs_seq.shape[1] - 1)
+        avg_loss_denom += (abs_seq.shape[1] - 1)
+
+        samples, _, sample_valid_length = summarier.summarize(art_seq = art_seq, art_valid_length = art_valid_length)
+        max_score_sample = samples[:, 0, :].asnumpy()
+        for i in range(max_score_sample.shape[0]):
+            summary_out.append([vocab.idx_to_token[ele] for ele in max_score_sample[i][1:(sample_valid_length[i] - 1)]])
+
+    avg_loss = avg_loss / avg_loss_denom
+    real_summary_out = [None for _ in range(all_inst_ids)]
+    for ind, sentence in zip(all_inst_ids, summary_out):
+        real_translation_out[ind] = sentence
+
+    return avg_loss, real_translation_out
 
 def run_train():
     trainer = gluon.Trainer(model.collect_params(), args.optimizer, {'learning_rate':args.lr})
@@ -111,29 +158,11 @@ def run_train():
             abs_valid_length = abs_valid_length.as_in_context(ctx)
             with mx.autograd.record():
                 #out should be our prediction with shape
-                decoder_states = model(art_seq, abs_seq[:, :-1], art_valid_length, abs_valid_length - 1)
-                vocab_scores = []
-                for i, output in enumerate(decoder_outputs):
-                    # V'(V[St,ht*]+b)+b'
-                    #shape(batch_size, Vsize)
-                    vocab_score = linear(output, weight, b)
-                    vocab_scores.append(vocab_score)
-                #vocab_dists: shape(length, batch_size, vsize)
-                vocab_dists = [mx.nd.softmax(v_s) for v_s in vocab_scores]
-                batch_num = mx.nd.arange(batch_size, dtype = int)
-                loss_per_step = []
-                for dec_step, dist in enumerate(vocab_dists):
-                    targets = mx.nd.array(self.abs_seq[:,dec_step], dtype = int)
-                    indices = mx.nd.stack((batch_num, targets), axis = 1)
-                    gold_probs = mx.nd.gather_nd(dist, indices)
-                    loss = -mx.nd.log(gold_probs)
-                    loss_per_step.append(loss)
-
-                loss = sum(loss_per_step)/abs_valid_length
-                loss = self._loss.mean()
+                decoder_outputs = model(art_seq, abs_seq[:, :-1], art_valid_length, abs_valid_length - 1)
+                loss = loss_function(decoder_outputs)
                 loss.backward()
 
-
+            trainer.step(batch_size)
             grads = [p.grad(ctx) for p in model.collect_params().values]
             gnorm = gluon.utils.clip_global_norm(grads, args.clip)
 
