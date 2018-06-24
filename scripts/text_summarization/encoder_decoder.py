@@ -62,10 +62,6 @@ class SUMEncoder(Seq2SeqEncoder):
         #Return:
         #encoder_outputs: list
         #   Outputs of the encoder"""
-<<<<<<< HEAD
-=======
-        print "encoder_decoder_test.__call__: ", inputs.shape
->>>>>>> c727e446161eb1da907678319584c94d8dee0c58
         return self.forward(inputs, states, valid_length)
 
     def forward(self, inputs, states = None, valid_length = None):
@@ -74,18 +70,11 @@ class SUMEncoder(Seq2SeqEncoder):
             states: list of NDArray or None
                 Initial States. The list of initial states
             return:
-<<<<<<< HEAD
             outputs: (batch_size, sequence_length, 2*num_hidden)
             new_state: lists of new_state
         """
         _, length, _ = inputs.shape
-=======
-            outputs: (batch_size, art_sequence_length, 2*num_hidden)
-            new_state: lists of new_state
-        """
-        _, length, _ = inputs.shape
-        # print inputs
->>>>>>> c727e446161eb1da907678319584c94d8dee0c58
+
         outputs, new_state = self.rnn_cells[0].unroll(
             length = length, inputs = inputs, begin_state = states, merge_outputs = True,
             valid_length = valid_length, layout = 'NTC')
@@ -95,7 +84,7 @@ class SUMEncoder(Seq2SeqEncoder):
         return [outputs, new_state]
 
 class Seq2SeqDecoder(Block):
-    r"""Base class of the decoders in sequence to sequence learning models.
+    """Base class of the decoders in sequence to sequence learning models.
     In the forward function, it generates the one-step-ahead decoding output.
     """
     def init_state_from_encoder(self, encoder_outputs, encoder_valid_length = None):
@@ -145,18 +134,14 @@ class SUMDecoder(Seq2SeqDecoder):
 
     def reduce_states(self, rnn_states = None):
         """
-<<<<<<< HEAD
             rnn_states: [l_cell_state, l_hidden_state, r_cell_state, r_hidden_state], shape(batch_size, hidden_dim)
             return: list of new_states, shape = [(batch_size, hidden_dim), (batch_size, hidden_dim)]
-        """
-=======
             rnn_states: [l_cell_state, l_hidden_state, r_cell_state, r_hidden_state],
             shape = (batch_size, hidden_dim)
             returns:
                 list: cell_state and hidden_state
         """
         print "#63: reduce_states"
->>>>>>> c727e446161eb1da907678319584c94d8dee0c58
         l_cell_state, l_hidden_state, r_cell_state, r_hidden_state = rnn_states
         old_c = mx.nd.concat(l_cell_state, r_cell_state, dim = 1)
         old_h = mx.nd.concat(l_hidden_state, r_hidden_state, dim = 1)
@@ -169,16 +154,11 @@ class SUMDecoder(Seq2SeqDecoder):
 
     def init_state_from_encoder(self, encoder_outputs, encoder_valid_length = None):
         """encoder_outputs: list: [outputs, new_state]
-<<<<<<< HEAD
             enc_states: (batch_size, length, num_hidden)
             rnn_states: [l_cell_state, l_hidden_state, r_cell_state, r_hidden_state]
             enc_states: shape = (batch_size, art_sequence_length, 2*hidden_dim)
-=======
-        enc_states: (batch_size, length, num_hidden)
-        rnn_states: [l_cell_state, l_hidden_state, r_cell_state, r_hidden_state]
-        new_rnn_states: [new_c, new_h]
-        decoder_input = [new_rnn_states, enc_states]
->>>>>>> c727e446161eb1da907678319584c94d8dee0c58
+            new_rnn_states: [new_c, new_h]
+            decoder_input = [new_rnn_states, enc_states]
         """
         print "#62"
         enc_states, rnn_states = encoder_outputs
@@ -187,14 +167,10 @@ class SUMDecoder(Seq2SeqDecoder):
         return [new_rnn_states, enc_states]
 
     def decode_seq(self, inputs, states, valid_length = None):
-<<<<<<< HEAD
         """#inputs: abs_seq
         #states: decoder_input
         #enc_states: (batch_size, sequence_length, 2 * num_hidden)
         returns : list of cell_output(batch_size, hidden_dim), context_vec(batch_size, 2*hidden_dim), attention_dist(batch_size, art_sequence_length)"""
-        length = inputs.shape[1]
-        batch_size = inputs.shape[0]
-=======
         """ inputs: abs_seq (batch_size, abs_length - 1, embedding_dim)
             states: decoder_input
             enc_states: (batch_size, sequence_length, 2*num_hidden)
@@ -204,13 +180,11 @@ class SUMDecoder(Seq2SeqDecoder):
         length = inputs.shape[1]
         batch_size = inputs.shape[0]
 
->>>>>>> c727e446161eb1da907678319584c94d8dee0c58
         enc_states = states[1] #fixed_states
         rnn_states = states[0]
         outputs = []
         context_vecs = []
         attention_dists = []
-<<<<<<< HEAD
         inputs = _as_list(mx.nd.split(inputs, num_outputs = length, axis = 1, squeeze_axis = True))
 
 
@@ -241,7 +215,6 @@ class SUMDecoder(Seq2SeqDecoder):
             context_vecs.append(context_vec)
             attention_dists.append(attention_dist)
 
-=======
         #len(inputs) = abs_sequence_length - 1
         inputs = _as_list(mx.nd.split(inputs, num_outputs = length, axis = 1, squeeze_axis = True))
         for i in range(length):
@@ -265,7 +238,6 @@ class SUMDecoder(Seq2SeqDecoder):
             context_vecs.append(context_vec)
             attention_dists.append(attention_dist)
 
->>>>>>> c727e446161eb1da907678319584c94d8dee0c58
         return outputs, context_vecs, attention_dists
 
 
@@ -273,15 +245,10 @@ class SUMDecoder(Seq2SeqDecoder):
         return self.forward(step_input, states)
 
     def forward(self, step_input, states):
-<<<<<<< HEAD
         """
         Input: step_input: shape = (batch_size, embed_dim)
         states: list of state (batch_size, hidden_dim)
         """
-        rnn_states = states
-        cell_output, new_rnn_states = self._rnn_cells[0](step_input, rnn_states)
-
-=======
         """query(step_input) : (batch_size, query_length, query_dim)
         #key: (batch_size, key_length, query_dim)
         #context vector: (batch_size, query_length, context_vec_dim)
@@ -290,11 +257,13 @@ class SUMDecoder(Seq2SeqDecoder):
         states: list(cell_state, h_state) (batch_size, hidden_dim)
         returns:
             new_states: list(cell_state, h_state) (batch_size, hidden_dim)
-
         """
         rnn_states = states
         cell_output, new_rnn_states = self._rnn_cells[0](step_input, rnn_states)
->>>>>>> c727e446161eb1da907678319584c94d8dee0c58
+
+
+        rnn_states = states
+        cell_output, new_rnn_states = self._rnn_cells[0](step_input, rnn_states)
         return cell_output, new_rnn_states
 
 def get_summ_encoder_decoder(cell_type = 'lstm', hidden_size = 128, dropout= 0.0,
