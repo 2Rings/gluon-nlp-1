@@ -2,7 +2,6 @@ import numpy as np
 import mxnet as mx
 from mxnet.gluon.loss import Loss
 from mxnet.gluon import nn, rnn
-# from mxnet.gluon.loss import SoftmaxCELoss
 
 
 class SequenceLoss(Loss):
