@@ -3,6 +3,7 @@ import os
 import collections
 import hashlib
 import time
+import gluonnlp
 from gluonnlp.data import SpacyTokenizer
 from gluonnlp.data import CorpusDataset
 from gluonnlp.data import count_tokens
@@ -19,11 +20,11 @@ class TrainValDataTransform(object):
         self._max_enc_step = max_enc_steps
         self._max_dec_step = max_dec_steps
 
-    def __call__(self, dataset, makevocab):
+    def __call__(self, dataset, makevocab = False, vocab = None):
         if makevocab:
-            return self.trans(dataset, makevocab)
+            return self.trans(dataset, makevocab, vocab)
         else:
-            return self.trans(dataset)
+            return self.trans(dataset, vocab = vocab)
 
     def get_embedding(self):
         return gluonnlp.embedding.create(self._embedding_type, self._source)
@@ -39,16 +40,19 @@ class TrainValDataTransform(object):
 
         end = time.time()
 
+        my_vocab = gluonnlp.Vocab(vocab_counter)
         print('Building vocabulary spent: {}'.format(end - start))
 
-        return vocab_counter
+        return my_vocab
 
-    def trans(self, dataset, makevocab = False):
+    def trans(self, dataset, makevocab = False, vocab = None):
 
         if makevocab:
-            my_vocab = build_vocab(dataset)
+            my_vocab = self.build_vocab(dataset)
+        else:
+            my_vocab = vocab
 
-        with open(data, 'r') as f:
+        with open(dataset, 'r') as f:
             lines = f.readlines()
 
         art = []
@@ -64,6 +68,7 @@ class TrainValDataTransform(object):
 
 
         data = ArrayDataset(art,abs)
+        # print data
         data_idx = ArrayDataset(art2idx, abs2idx)
-
-        return data, data_idx, my_vocab
+        # print data_idx
+        return [data, data_idx, my_vocab]
