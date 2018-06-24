@@ -17,21 +17,25 @@ from mxnet.gluon.data import ArrayDataset, SimpleDataset
 from mxnet.gluon.data import DataLoader
 from transform import TrainValDataTransform
 from loss import SequenceLoss
+import gluonnlp.data.batchify as btf
+from encoder_decoder import get_summ_encoder_decoder
+from summarization import SummarizationModel
+from mxnet import gluon
 
 import transform
 
-parser = argparse.AugmentParser(description = 'Neural Abstractive Summarization')
+parser = argparse.ArgumentParser(description = 'Neural Abstractive Summarization')
 
 parser.add_argument('--dataset', type = str, default = '', help = 'Dataset to use.')
-parser.add_argument('--epochs', type = int, default = 40, help = 'upper epoch limit')
+parser.add_argument('--epochs', type = int, default = 2, help = 'upper epoch limit')
 parser.add_argument('--mode', type = str, default = 'train', help = 'Train/Validation/Test.')
 parser.add_argument('--experiment_name', type = str, default = 'experiment', help = 'experiment name')
 parser.add_argument('--hidden_dim', type = int, default = 256, help = 'dimension of RNN hidden states')
 parser.add_argument('--embedding_dim', type = int, default = 128, help = 'dimension of word embedding')
-parser.add_argument('--batch_size', type = int, default = 16, help = 'Batch Size')
+parser.add_argument('--batch_size', type = int, default = 5, help = 'Batch Size')
 parser.add_argument('--test_batch_size', type = int, default = 16, help = 'Test Batch Size')
-parser.add_argument('--max_enc_steps', type = int, default = 400, help = 'max timesteps of encoder (max source text tokens)')
-parser.add_argument('--max_dec_steps', type = int, default = 100, help = 'max timesteps of decoder (max summary tokens)')
+parser.add_argument('--max_enc_steps', type = int, default = 7, help = 'max timesteps of encoder (max source text tokens)')
+parser.add_argument('--max_dec_steps', type = int, default = 6, help = 'max timesteps of decoder (max summary tokens)')
 parser.add_argument('--beam_size', type = int, default = 4, help = 'beam size for beam search decoding.')
 parser.add_argument('--min_dec_steps', type = int, default = 35, help = 'Minimum sequence length of generated summary. Applies only for beam search decoding mode')
 parser.add_argument('--vocab_size', type = int, default = 50000, help = 'Size of vocabulary.')
@@ -40,24 +44,32 @@ parser.add_argument('--lr', type = float, default = 0.15, help = 'Learning rate'
 parser.add_argument('--bucket_ratio', type = float, default = 0.0, help = 'bucket_ratio')
 parser.add_argument('--num_buckets', type = int, default = 8, help = 'bucket number')
 parser.add_argument('--gpu', type = int, default = None, help = 'id of the gpu to use. Set it to empty means to use cpu.')
-args = parser.parse_args()
-print(args)
+parser.add_argument('--clip', type = float, default = 3.0, help = 'gradient clipping')
 
-data_path = args.dataset
+args = parser.parse_args()
+
+
+# data_path = args.dataset
+data_path = "/Users/Admin/Documents/DL/nlp_sum/text_summarization(20180617)/data/for_debugging/finished_files"
+
 
 train_path = os.path.join(data_path, "train.story")
 val_path = os.path.join(data_path, "val.story")
-test_path = os.path.join(data_path, "test.stroy")
+test_path = os.path.join(data_path, "test.story")
 
-data_transform = TrainValDataTransform(max_enc_steps= args.max_enc_steps=, max_dec_steps= args.max_dec_steps)
+data_transform = TrainValDataTransform(max_enc_steps= args.max_enc_steps, max_dec_steps= args.max_dec_steps)
 
-train_data, train_data2idx, my_vocab = data_transform(dataset = train_data, makevocab = True)
-val_data, val_data2idx = data_transform(dataset = val_path, vocab = my_vocab)
-test_data, test_data2idx = data_transform(dataset = test_path, vocab = my_vocab)
+train_data, train_data2idx, my_vocab = data_transform(dataset = train_path, makevocab = True)
+val_data, val_data2idx, _ = data_transform(dataset = val_path, vocab = my_vocab)
+test_data, test_data2idx, _ = data_transform(dataset = test_path, vocab = my_vocab)
 
-train_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(len[1])) for i, ele in enumerate(train_data)])
-val_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(len[1]), i) for i, ele in enumerate(val_data)])
-test_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(len[1]), i) for i, ele in enumerate(test_data)])
+data_train_lengths = [(len(ele[0]), len(ele[1])) for i, ele in enumerate(train_data)]
+data_val_lengths = [(len(ele[0]), len(ele[1])) for i, ele in enumerate(val_data)]
+data_test_lengths = [(len(ele[0]), len(ele[1])) for i, ele in enumerate(test_data)]
+
+train_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(ele[1])) for i, ele in enumerate(train_data)])
+val_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(ele[1]), i) for i, ele in enumerate(val_data)])
+test_data = SimpleDataset([(ele[0], ele[1], len(ele[0]), len(ele[1]), i) for i, ele in enumerate(test_data)])
 
 if args.gpu is None:
     ctx = mx.cpu()
@@ -65,11 +77,12 @@ if args.gpu is None:
 else:
     ctx = mx.gpu(args.gpu)
 
-encoder, decoder = get_summ_encoder_decoder(hidden_size = args.num_hidden)
+encoder, decoder = get_summ_encoder_decoder(hidden_size = args.hidden_dim)
 
-model = SummarizationModel(vocab = my_vocab, encoder = encoder, decoder = decoder, embed_size = args.embedding_dim, prefix = 'summary_')
+model = SummarizationModel(vocab = my_vocab, encoder = encoder, decoder = decoder, hidden_dim = args.hidden_dim, embed_size = args.embedding_dim, prefix = 'summary_')
 
-loss_function = SequenceLoss(valid_length= abs_valid_length, vocab_size = args.vocab_size)
+loss_function = SequenceLoss(valid_length= args.max_dec_steps, batch_size = args.batch_size, vocab_size = args.vocab_size)
+loss_function.initialize(init = mx.init.Uniform(0.1), ctx =ctx)
 loss_function.hybridize()
 
 model.initialize(init = mx.init.Uniform(0.1), ctx = ctx)
@@ -77,8 +90,6 @@ model.hybridize()
 
 # TODO: Summarizer
 
-def linear():
-    pass
 
 def evaluate(data_loader):
     summary_out = []
@@ -150,6 +161,16 @@ def run_train():
                                     batchify_fn=test_batchify_fn,
                                     num_workers=8)
 
+    # art_seq = mx.nd.random.uniform(shape=(5,7))
+    # abs_seq = mx.nd.random.uniform(shape=(5,7))
+    # art_seq = art_seq.as_in_context(ctx)
+    # abs_seq = abs_seq.as_in_context(ctx)
+    # art_valid_length = mx.ndarray.ones(shape=(5,))*7
+    # abs_valid_length = mx.ndarray.ones(shape=(5,))*7
+    # # print art_valid_length
+    # art_valid_length = art_valid_length.as_in_context(ctx)
+    # abs_valid_length = abs_valid_length.as_in_context(ctx)
+
     for epoch_id in range(args.epochs):
         for batch_id, (art_seq, abs_seq, art_valid_length, abs_valid_length) in enumerate(train_data_loader):
             art_seq = art_seq.as_in_context(ctx)
@@ -159,17 +180,33 @@ def run_train():
             with mx.autograd.record():
                 #out should be our prediction with shape
                 decoder_outputs = model(art_seq, abs_seq[:, :-1], art_valid_length, abs_valid_length - 1)
-                loss = loss_function(decoder_outputs)
+                #decoder_outputs[0] = (batch_size, 2* hidden_dim)
+                outs = decoder_outputs[0]
+                outs = mx.ndarray.expand_dims(outs, axis = 0)
+
+                for i in range(1, len(decoder_outputs)):
+                    ele = mx.ndarray.expand_dims(decoder_outputs[i], axis = 0)
+                    outs = mx.ndarray.concat(outs, ele, dim = 0)
+                decoder_outputs = outs
+                #decoder_outputs : shape(abs_length, bathc_size, 2*hidden_dim)
+                abs_seq = abs_seq[:,:-1]
+                print abs_seq.shape
+                loss = loss_function(decoder_outputs, abs_seq)
                 loss.backward()
 
-            trainer.step(batch_size)
-            grads = [p.grad(ctx) for p in model.collect_params().values]
-            gnorm = gluon.utils.clip_global_norm(grads, args.clip)
 
-        # valid_loss, valid_translation_out = evaluate(val_data_loader)
-    model.load_params(os.path.join(args.save_dir, 'valid_best.params'))
-    valid_loss, valid_summary = evaluate(val_data_loader)
-    ## TODO: evaluation and rouge
+
+            trainer.step(args.batch_size)
+            grads = [p.grad(ctx) for p in model.collect_params().values()]
+            # gnorm = gluon.utils.clip_global_norm(grads, args.clip)
+
+
+            step_loss = loss.asscalar()
+
+    # valid_loss, valid_translation_out = evaluate(val_data_loader)
+    # model.load_params(os.path.join(args.save_dir, 'valid_best.params'))
+    # valid_loss, valid_summary = evaluate(val_data_loader)
+    # ## TODO: evaluation and rouge
 
 
 
