@@ -9,6 +9,7 @@ from gluonnlp.data import count_tokens
 #This script aims at preprocessing raw data into the format that can be the input for transform.py
 # dm_single_close_quote = u'\u2019'
 # dm_double_close_quote = u'\u201d'
+<<<<<<< HEAD
 END_TOKENS = ['.','!','?','...', "'", "`", '"',  ")"]
 
 all_train_urls = "/Users/Admin/Documents/DL/gluon-nlp-1/scripts/text_summarization/data/train.txt"
@@ -16,6 +17,18 @@ all_val_urls = "/Users/Admin/Documents/DL/gluon-nlp-1/scripts/text_summarization
 all_test_urls = "/Users/Admin/Documents/DL/gluon-nlp-1/scripts/text_summarization/data/test.txt"
 finished_files_dir = "//Users/Admin/Documents/DL/gluon-nlp-1/scripts/text_summarization/data/finished_files"
 stories_dir = "/Users/Admin/Documents/DL/gluon-nlp-1/scripts/text_summarization/data/data"
+=======
+# END_TOKENS = ['.','!','?','...', "'", "`", '"', dm_single_close_quote, dm_double_close_quote, ")"]
+END_TOKENS = ['.','!','?','...', "'", "`", '"', ")"]
+
+
+# urls_path =
+all_train_urls = "/Users/Admin/Documents/DL/gluon-nlp-1/scripts/text_summarization/data/for_debugging/train.txt"
+all_val_urls = "/Users/Admin/Documents/DL/gluon-nlp-1/scripts/text_summarization/data/for_debugging/val.txt"
+all_test_urls = "/Users/Admin/Documents/DL/gluon-nlp-1/scripts/text_summarization/data/for_debugging/test.txt"
+finished_files_dir = "finished_files"
+stories_dir = "/Users/Admin/Documents/DL/gluon-nlp-1/scripts/text_summarization/data/for_debugging/data"
+>>>>>>> c727e446161eb1da907678319584c94d8dee0c58
 
 num_expected_cnn_stories = 92579
 num_expected_dm_stories = 219506
@@ -93,6 +106,37 @@ def write2file(url_file, out_file):
             article, abstract = get_art_abs(story_file)
 
             writer.write(article + '\t' + abstract + '\n')
+<<<<<<< HEAD
+=======
+
+# def write2file(url_file, out_file):
+#     url_list = read_text_file(url_file)
+#     url_hashes = get_url_hashes(url_list)
+#     story_fnames = [s+".story" for s in url_hashes]
+#     num_stories = len(story_fnames)
+#
+#     outname = os.path.join(out_file)
+#     with open(outname, 'at') as writer:
+#         for idx, s in enumerate(story_fnames):
+#
+#             #check file
+#             if os.path.isfile(os.path.join(stories_dir,s)):
+#                 story_file = os.path.join(stories_dir, s)
+#             # elif os.path.isfile(os.path.join(cnn_stories_dir,s)):
+#             #     story_file = os.path.join(cnn_stories_dir, s)
+#             # elif os.path.isfile(os.path.join(dm_stories_dir,s)):
+#             #     story_file = os.path.join(dm_stories_dir,s)
+#             else:
+#                 check_num_stories(cnn_stories_dir, num_expected_cnn_stories)
+#                 check_num_stories(dm_stories_dir, num_expected_dm_stories)
+#                 raise Exception("Error")
+#
+#             #getting art-abs pair
+#             article, abstract = get_art_abs(story_file)
+#
+#             #store in one file
+#             writer.write(' '.join(article) + '\t' + ' '.join(abstract) + '\n')
+>>>>>>> c727e446161eb1da907678319584c94d8dee0c58
 
 
 
@@ -100,6 +144,7 @@ if __name__ == '__main__':
     # cnn_stories_dir = sys.argv[1]
     # dm_stories_dir = sys.argv[2]
 
+<<<<<<< HEAD
 
     if not os.path.exists(finished_files_dir): os.makedirs(finished_files_dir)
 
@@ -107,3 +152,13 @@ if __name__ == '__main__':
     write2file(all_train_urls, os.path.join(finished_files_dir, "train.story"))
     write2file(all_val_urls, os.path.join(finished_files_dir, "val.story"))
     write2file(all_test_urls, os.path.join(finished_files_dir, "test.story"))
+=======
+    # check_num_stories(cnn_stories_dir, num_expected_cnn_stories)
+    # check_num_stories(dm_stories_dir, num_expected_dm_stories)
+
+    if not os.path.exists(finished_files_dir): os.makedirs(finished_files_dir)
+
+    write2file(all_train_urls, os.path.join(finished_files_dir, "train.txt"))
+    write2file(all_val_urls, os.path.join(finished_files_dir, "val.txt"))
+    write2file(all_test_urls, os.path.join(finished_files_dir, "test.txt"))
+>>>>>>> c727e446161eb1da907678319584c94d8dee0c58
