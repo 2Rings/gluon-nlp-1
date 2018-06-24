@@ -138,7 +138,7 @@ def run_train():
     train_batchify_fn = btf.Tuple(btf.Pad(), btf.Pad(), btf.Stack(), btf.Stack())
 
     test_batchify_fn = btf.Tuple(btf.Pad(), btf.Pad(), btf.Stack(), btf.Stack(), btf.Stack())
-    print type(train_data[0])
+
     train_batch_sampler = FixedBucketSampler(lengths = data_train_lengths,
                                                 batch_size = args.batch_size,
                                                 num_buckets = args.num_buckets,
@@ -172,6 +172,7 @@ def run_train():
                                     batchify_fn=test_batchify_fn,
                                     num_workers=8)
 
+    #for # DEBUG:
     # art_seq = mx.nd.random.uniform(shape=(5,7))
     # abs_seq = mx.nd.random.uniform(shape=(5,7))
     # art_seq = art_seq.as_in_context(ctx)
@@ -181,6 +182,7 @@ def run_train():
     # # print art_valid_length
     # art_valid_length = art_valid_length.as_in_context(ctx)
     # abs_valid_length = abs_valid_length.as_in_context(ctx)
+
     print type(test_data_loader)
     print "trianning loop"
     for epoch_id in range(args.epochs):
