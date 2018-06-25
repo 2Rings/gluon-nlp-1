@@ -12,6 +12,7 @@ class SequenceLoss(Loss):
         self.valid_length = valid_length
         self.batch_size = batch_size
         self.vocab_size = vocab_size
+        self.batch_axis = batch_axis
         with self.name_scope():
             self._linear_layer = nn.HybridSequential()
             with self._linear_layer.name_scope():
@@ -19,10 +20,10 @@ class SequenceLoss(Loss):
 
     def hybrid_forward(self, F, decoder_outputs, abs_seq):
         vocab_scores = []
+        print type(decoder_outputs), type(abs_seq)
         #decoder_outputs: list of all V[st, ht*] + b
         for i, output in enumerate(decoder_outputs):
-            # V'(input)+b'
-            #shape(batch_size, Vsize)
+            # V'(output)+b' => shape(batch_size, Vsize)
             vocab_score = self._linear_layer[0](output)
             vocab_scores.append(vocab_score)
         #vocab_dists: shape(length, batch_size, vsize)
@@ -39,4 +40,4 @@ class SequenceLoss(Loss):
 
         loss_per_step = mx.symbol.Group(loss_per_step)
         loss = F.sum(loss_per_step, axis = 0)
-        return F.mean(loss, axis = self._batch_axis, exclude = True)
+        return F.mean(loss, axis = self.batch_axis, exclude = True)

@@ -187,44 +187,7 @@ class SUMDecoder(Seq2SeqDecoder):
         attention_dists = []
         inputs = _as_list(mx.nd.split(inputs, num_outputs = length, axis = 1, squeeze_axis = True))
 
-
-
         for i in range(length):
-            """
-                #query(step_input) : (batch_size, 1, embed_dim)
-                #key: (batch_size, art_sequence_length, 2*hidden_dim)
-                #context vector: (batch_size, 1, context_vec_dim)
-                #attention_weight: (batch_size, 1, art_sequence_length)
-                # inp_states = states[1] #fixed_states
-            returns:
-                # context vector: (batch_size, 2*hidden_dim)
-                # context vector: ht* = sum_i(a_i^t h_i)
-                # attention_dist: (batch_size, sequence_length)
-                # cell_output: (batch_size, num_hidden)"""
-            cell_output, rnn_states = self.forward(inputs[i], rnn_states)
-            outputs.append(cell_output)
-            cell_output = mx.ndarray.expand_dims(cell_output, axis = 1)
-            context_vec, attention_dist = self.attention_cell(cell_output, enc_states)
-
-            # #V[st, ht*] + b
-
-
-            context_vec = mx.ndarray.reshape(context_vec, shape = (batch_size, -1))
-            attention_dist = mx.ndarray.reshape(attention_dist, shape = (batch_size, -1))
-
-            context_vecs.append(context_vec)
-            attention_dists.append(attention_dist)
-
-        #len(inputs) = abs_sequence_length - 1
-        inputs = _as_list(mx.nd.split(inputs, num_outputs = length, axis = 1, squeeze_axis = True))
-        for i in range(length):
-            """ input_size = inputs[i].shape[2]
-            # context vector: (batch_size, query_length, context_vec_dim) / (batch_size, num_hidden)
-            # context vector: ht* = sum_i(a_i^t h_i)
-            # attention_dist: (batch_size, sequence_length)
-            # cell_output: (batch_size, num_hidden)
-            # print "encoder_decoder_test.decode_seq.enc_states: ", enc_states.shape
-            """
             cell_output, rnn_states = self.forward(inputs[i], rnn_states)
             outputs.append(cell_output)
             cell_output = mx.ndarray.expand_dims(cell_output, axis = 1)

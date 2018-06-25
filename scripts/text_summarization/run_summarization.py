@@ -135,87 +135,87 @@ def run_train():
     trainer = gluon.Trainer(model.collect_params(), args.optimizer, {'learning_rate':args.lr})
     print "#58: batchify"
 
-    train_batchify_fn = btf.Tuple(btf.Pad(), btf.Pad(), btf.Stack(), btf.Stack())
-
-    test_batchify_fn = btf.Tuple(btf.Pad(), btf.Pad(), btf.Stack(), btf.Stack(), btf.Stack())
-
-    train_batch_sampler = FixedBucketSampler(lengths = data_train_lengths,
-                                                batch_size = args.batch_size,
-                                                num_buckets = args.num_buckets,
-                                                ratio = args.bucket_ratio,
-                                                shuffle = True)
-    logging.info('Train Batch Sampler:\n{}'.format(train_batch_sampler.stats()))
-    train_data_loader = DataLoader(train_data,
-                                    batch_sampler = train_batch_sampler,
-                                    batchify_fn=train_batchify_fn,
-                                    num_workers=8)
-
-    val_batch_sampler = FixedBucketSampler(lengths = data_val_lengths,
-                                                batch_size = args.test_batch_size,
-                                                num_buckets = args.num_buckets,
-                                                ratio = args.bucket_ratio,
-                                                shuffle = False)
-
-    val_data_loader = DataLoader(  val_data,
-                                    batch_sampler = val_batch_sampler,
-                                    batchify_fn=test_batchify_fn,
-                                    num_workers=8)
-
-    test_batch_sampler = FixedBucketSampler(lengths = data_test_lengths,
-                                                batch_size = args.test_batch_size,
-                                                num_buckets = args.num_buckets,
-                                                ratio = args.bucket_ratio,
-                                                shuffle = False)
-
-    test_data_loader = DataLoader(test_data,
-                                    batch_sampler = test_batch_sampler,
-                                    batchify_fn=test_batchify_fn,
-                                    num_workers=8)
+    # train_batchify_fn = btf.Tuple(btf.Pad(), btf.Pad(), btf.Stack(), btf.Stack())
+    #
+    # test_batchify_fn = btf.Tuple(btf.Pad(), btf.Pad(), btf.Stack(), btf.Stack(), btf.Stack())
+    #
+    # train_batch_sampler = FixedBucketSampler(lengths = data_train_lengths,
+    #                                             batch_size = args.batch_size,
+    #                                             num_buckets = args.num_buckets,
+    #                                             ratio = args.bucket_ratio,
+    #                                             shuffle = True)
+    # logging.info('Train Batch Sampler:\n{}'.format(train_batch_sampler.stats()))
+    # train_data_loader = DataLoader(train_data,
+    #                                 batch_sampler = train_batch_sampler,
+    #                                 batchify_fn=train_batchify_fn,
+    #                                 num_workers=8)
+    #
+    # val_batch_sampler = FixedBucketSampler(lengths = data_val_lengths,
+    #                                             batch_size = args.test_batch_size,
+    #                                             num_buckets = args.num_buckets,
+    #                                             ratio = args.bucket_ratio,
+    #                                             shuffle = False)
+    #
+    # val_data_loader = DataLoader(  val_data,
+    #                                 batch_sampler = val_batch_sampler,
+    #                                 batchify_fn=test_batchify_fn,
+    #                                 num_workers=8)
+    #
+    # test_batch_sampler = FixedBucketSampler(lengths = data_test_lengths,
+    #                                             batch_size = args.test_batch_size,
+    #                                             num_buckets = args.num_buckets,
+    #                                             ratio = args.bucket_ratio,
+    #                                             shuffle = False)
+    #
+    # test_data_loader = DataLoader(test_data,
+    #                                 batch_sampler = test_batch_sampler,
+    #                                 batchify_fn=test_batchify_fn,
+    #                                 num_workers=8)
 
     #for # DEBUG:
-    # art_seq = mx.nd.random.uniform(shape=(5,7))
-    # abs_seq = mx.nd.random.uniform(shape=(5,7))
-    # art_seq = art_seq.as_in_context(ctx)
-    # abs_seq = abs_seq.as_in_context(ctx)
-    # art_valid_length = mx.ndarray.ones(shape=(5,))*7
-    # abs_valid_length = mx.ndarray.ones(shape=(5,))*7
-    # # print art_valid_length
-    # art_valid_length = art_valid_length.as_in_context(ctx)
-    # abs_valid_length = abs_valid_length.as_in_context(ctx)
+    art_seq = mx.nd.random.uniform(shape=(args.batch_size,7))
+    abs_seq = mx.nd.random.uniform(shape=(args.batch_size,7))
+    art_seq = art_seq.as_in_context(ctx)
+    abs_seq = abs_seq.as_in_context(ctx)
+    art_valid_length = mx.ndarray.ones(shape=(args.batch_size,))*7
+    abs_valid_length = mx.ndarray.ones(shape=(args.batch_size,))*6
+    # print art_valid_length
+    art_valid_length = art_valid_length.as_in_context(ctx)
+    abs_valid_length = abs_valid_length.as_in_context(ctx)
 
-    print type(test_data_loader)
     print "trianning loop"
     for epoch_id in range(args.epochs):
-        for batch_id, (art_seq, abs_seq, art_valid_length, abs_valid_length) in enumerate(train_data_loader):
-            art_seq = art_seq.as_in_context(ctx)
-            abs_seq = abs_seq.as_in_context(ctx)
-            art_valid_length = art_valid_length.as_in_context(ctx)
-            abs_valid_length = abs_valid_length.as_in_context(ctx)
-            with mx.autograd.record():
-                #out should be our prediction with shape
-                decoder_outputs = model(art_seq, abs_seq[:, :-1], art_valid_length, abs_valid_length - 1)
-                #decoder_outputs[0] = (batch_size, 2* hidden_dim)
-                outs = decoder_outputs[0]
-                outs = mx.ndarray.expand_dims(outs, axis = 0)
+        # for batch_id, (art_seq, abs_seq, art_valid_length, abs_valid_length) in enumerate(train_data_loader):
+            # art_seq = art_seq.as_in_context(ctx)
+            # abs_seq = abs_seq.as_in_context(ctx)
+            # art_valid_length = art_valid_length.as_in_context(ctx)
+            # abs_valid_length = abs_valid_length.as_in_context(ctx)
+        with mx.autograd.record():
+            #out should be our prediction with shape
+            decoder_outputs = model(art_seq, abs_seq[:, :-1], art_valid_length, abs_valid_length - 1)
+            #decoder_outputs[0] = (batch_size, 2* hidden_dim)
+            outs = decoder_outputs[0]
+            outs = mx.ndarray.expand_dims(outs, axis = 0)
 
-                for i in range(1, len(decoder_outputs)):
-                    ele = mx.ndarray.expand_dims(decoder_outputs[i], axis = 0)
-                    outs = mx.ndarray.concat(outs, ele, dim = 0)
-                decoder_outputs = outs
-                #decoder_outputs : shape(abs_length, bathc_size, 2*hidden_dim)
-                abs_seq = abs_seq[:,:-1]
-                print abs_seq.shape
-                loss = loss_function(decoder_outputs, abs_seq)
-                loss.backward()
+            for i in range(1, len(decoder_outputs)):
+                ele = mx.ndarray.expand_dims(decoder_outputs[i], axis = 0)
+                outs = mx.ndarray.concat(outs, ele, dim = 0)
+            decoder_outputs = outs
+            #decoder_outputs : shape(abs_length, bathc_size, 2*hidden_dim)
+            abs_seq = abs_seq[:,:-1]
+            print type(decoder_outputs), type(abs_seq)
 
-
-
-            trainer.step(args.batch_size)
-            grads = [p.grad(ctx) for p in model.collect_params().values()]
-            # gnorm = gluon.utils.clip_global_norm(grads, args.clip)
+            loss = loss_function(decoder_outputs, abs_seq)
+            loss.backward()
 
 
-            step_loss = loss.asscalar()
+
+        trainer.step(args.batch_size)
+        grads = [p.grad(ctx) for p in model.collect_params().values()]
+        # gnorm = gluon.utils.clip_global_norm(grads, args.clip)
+
+
+        step_loss = loss.asscalar()
 
     # valid_loss, valid_translation_out = evaluate(val_data_loader)
     # model.load_params(os.path.join(args.save_dir, 'valid_best.params'))
