@@ -20,7 +20,7 @@ from mxnet.gluon.data import DataLoader
 from transform_data import TrainValDataTransform
 import gluonnlp.data.batchify as btf
 from encoder_decoder import get_summ_encoder_decoder
-from summarization import SummarizationModel
+from summarization_test import SummarizationModel
 from mxnet import gluon
 from mxnet.gluon.loss import SoftmaxCELoss
 
@@ -28,25 +28,26 @@ from mxnet.gluon.loss import SoftmaxCELoss
 parser = argparse.ArgumentParser(description = 'Neural Abstractive Summarization')
 
 parser.add_argument('--dataset', type = str, default = '', help = 'Dataset to use.')
-parser.add_argument('--epochs', type = int, default = 5, help = 'upper epoch limit')
+parser.add_argument('--epochs', type = int, default = 20, help = 'upper epoch limit')
 parser.add_argument('--mode', type = str, default = 'train', help = 'Train/Validation/Test.')
 parser.add_argument('--experiment_name', type = str, default = 'experiment', help = 'experiment name')
-parser.add_argument('--hidden_dim', type = int, default = 64, help = 'dimension of RNN hidden states')
-parser.add_argument('--embedding_dim', type = int, default = 32, help = 'dimension of word embedding')
+parser.add_argument('--hidden_dim', type = int, default = 128, help = 'dimension of RNN hidden states')
+parser.add_argument('--embedding_dim', type = int, default = 64, help = 'dimension of word embedding')
 parser.add_argument('--batch_size', type = int, default = 32, help = 'Batch Size')
 parser.add_argument('--test_batch_size', type = int, default = 16, help = 'Test Batch Size')
-parser.add_argument('--max_enc_steps', type = int, default = 200, help = 'max timesteps of encoder (max source text tokens)')
-parser.add_argument('--max_dec_steps', type = int, default = 50, help = 'max timesteps of decoder (max summary tokens)')
+parser.add_argument('--max_enc_steps', type = int, default = 400, help = 'max timesteps of encoder (max source text tokens)')
+parser.add_argument('--max_dec_steps', type = int, default = 100, help = 'max timesteps of decoder (max summary tokens)')
 parser.add_argument('--beam_size', type = int, default = 4, help = 'beam size for beam search decoding.')
 parser.add_argument('--min_dec_steps', type = int, default = 35, help = 'Minimum sequence length of generated summary. Applies only for beam search decoding mode')
-parser.add_argument('--vocab_size', type = int, default = 50000, help = 'Size of vocabulary.')
-parser.add_argument('--optimizer', type = str, default = 'adam', help = 'Optimization Algorithm')
+parser.add_argument('--vocab_size', type = int, default = 25000, help = 'Size of vocabulary.')
+parser.add_argument('--optimizer', type = str, default = 'AdaGrad', help = 'Optimization Algorithm')
 parser.add_argument('--lr', type = float, default = 0.15, help = 'Learning rate')
 parser.add_argument('--bucket_ratio', type = float, default = 0.0, help = 'bucket_ratio')
-parser.add_argument('--num_buckets', type = int, default = 1, help = 'bucket number')
-parser.add_argument('--gpu', type = int, default = 0, help = 'id of the gpu to use. Set it to empty means to use cpu.')
-parser.add_argument('--clip', type = float, default = 5.0, help = 'gradient clipping')
+parser.add_argument('--num_buckets', type = int, default = 100, help = 'bucket number')
+parser.add_argument('--gpu', type = int, default = 1, help = 'id of the gpu to use. Set it to empty means to use cpu.')
+parser.add_argument('--clip', type = float, default = 2.0, help = 'gradient clipping')
 parser.add_argument('--log_interval', type=int, default=100, metavar='N', help='report interval')
+parser.add_argument('--save_dir', type=str, default='out_dir', help='directory path to save the final model and training log')
 
 args = parser.parse_args()
 
@@ -79,15 +80,15 @@ if args.gpu is None:
 else:
     ctx = mx.gpu(args.gpu)
 
-encoder, decoder = get_summ_encoder_decoder(hidden_size = args.hidden_dim)
+encoder, decoder = get_summ_encoder_decoder(hidden_size = args.hidden_dim, vocab=my_vocab)
 
 model = SummarizationModel(vocab = my_vocab, encoder = encoder, decoder = decoder, hidden_dim = args.hidden_dim, embed_size = args.embedding_dim, prefix = 'summary_')
 
 loss_function = SoftmaxCELoss()
-loss_function.initialize(init = mx.init.Uniform(0.1), ctx = ctx)
+loss_function.initialize(init = mx.init.Uniform(0.02), ctx = ctx)
 loss_function.hybridize()
 # print "#56"
-model.initialize(init = mx.init.Uniform(0.1), ctx = ctx)
+model.initialize(init=mx.init.Uniform(0.02), ctx=ctx)
 model.hybridize()
 
 # TODO: Summarizer
@@ -111,10 +112,10 @@ def evaluate(data_loader):
         avg_loss += loss * (abs_seq.shape[1] - 1)
         avg_loss_denom += (abs_seq.shape[1] - 1)
 
-        samples, _, sample_valid_length = summarier.summarize(art_seq = art_seq, art_valid_length = art_valid_length)
+        samples, _, sample_valid_length = summarizer.summarize(art_seq = art_seq, art_valid_length = art_valid_length)
         max_score_sample = samples[:, 0, :].asnumpy()
         for i in range(max_score_sample.shape[0]):
-            summary_out.append([vocab.idx_to_token[ele] for ele in max_score_sample[i][1:(sample_valid_length[i] - 1)]])
+            summary_out.append([my_vocab.idx_to_token[ele] for ele in max_score_sample[i][1:(sample_valid_length[i] - 1)]])
 
     avg_loss = avg_loss / avg_loss_denom
     real_summary_out = [None for _ in range(all_inst_ids)]
@@ -122,6 +123,14 @@ def evaluate(data_loader):
         real_translation_out[ind] = sentence
 
     return avg_loss, real_translation_out
+
+def calc_running_avg_loss(loss, running_avg_loss, decay=0.99):
+    if running_avg_loss == 0:  # on the first iteration just take the loss
+        running_avg_loss = loss
+    else:
+        running_avg_loss = running_avg_loss * decay + (1 - decay) * loss
+
+    return running_avg_loss
 
 def run_train():
     # print "#57: trainer"
@@ -169,8 +178,10 @@ def run_train():
     print('Batchifying spent {}'.format(time() - t0))
 
     # print "trianning loop"
+    best_loss = 50.0
     for epoch_id in range(args.epochs):
         log_avg_loss = 0
+        running_avg_loss = 0
         log_avg_gnorm = 0
         log_wc = 0
         log_start_time = time()
@@ -189,19 +200,39 @@ def run_train():
                 '''
                     SoftmaxCELoss()
                 '''
-                decoder_outputs = model(art_seq, abs_seq[:, :-1], art_valid_length, abs_valid_length - 1)
+                # if batch_id < 100:
+                #     print(batch_id)
+                #     print(abs_target)
+                #     print(abs_target.shape)
+                #     print(abs_seq.shape)
+                #     print(art_seq.shape)
+                # if batch_id == 0:
+                #     print(type(abs_target[0]), abs_target.shape)
+                #     print(abs_target[0])
+                #     # show_case = [my_vocab.idx_to_token[int(l)] for l in abs_target[0]]
+                #     print("show_case", show_case)
+                decoder_outputs = model(art_seq, abs_seq, art_valid_length, abs_valid_length)
                 # targets = mx.ndarray.one_hot(abs_seq, args.vocab_size)
                 decoder_outputs = mx.ndarray.stack(*decoder_outputs, axis = 1)
-                loss = loss_function(decoder_outputs, abs_target[:, :-1]).mean()
-                loss = loss * abs_target.shape[1] / (target_valid_length-1).mean()
+                loss = loss_function(decoder_outputs, abs_target)
+                # print("loss type: ", type(loss), loss)
+                # loss1 = loss.sum()/abs_target.shape[0]
+                # print("loss1 type: ", type(loss1), loss1)
+
+                loss = loss.mean()
+
+                # print("loss type: ", type(loss), loss)
+                loss = loss * abs_target.shape[1] /(target_valid_length).mean()
                 loss.backward()
 
             grads = [p.grad(ctx) for p in model.collect_params().values()]
             gnorm = gluon.utils.clip_global_norm(grads, args.clip)
+            trainer.step(1)
             step_loss = loss.asscalar()
+            #running_avg_loss = calc_running_avg_loss(step_loss, running_avg_loss)
             print ("{}: {}: spent {}s and step_loss: {}".format(epoch_id, batch_id, time() - ts, step_loss))
             art_wc = art_valid_length.sum().asscalar()
-            abs_wc = (abs_valid_length - 1).sum().asscalar()
+            abs_wc = (abs_valid_length).sum().asscalar()
             log_avg_loss += step_loss
             log_avg_gnorm += gnorm
             log_wc += art_wc + abs_wc
@@ -220,18 +251,12 @@ def run_train():
                 log_wc = 0
 
 
+            if batch_id%500 == 0:
+                save_path = os.path.join(args.save_dir, 'valid_best.params')
+                logging.info('Save best parameters to {}'.format(save_path))
+                model.save_params(save_path)
+                # raise Exception("Save Model!")
 
-
-        # trainer.step(args.batch_size)
-        # grads = [p.grad(ctx) for p in model.collect_params().values()]
-        # gnorm = gluon.utils.clip_global_norm(grads, args.clip)
-        #
-        #
-        # step_loss = loss.asscalar()
-
-    # valid_loss, valid_translation_out = evaluate(val_data_loader)
-    # model.load_params(os.path.join(args.save_dir, 'valid_best.params'))
-    # valid_loss, valid_summary = evaluate(val_data_loader)
     # ## TODO: evaluation and rouge
 
 if __name__ == '__main__':

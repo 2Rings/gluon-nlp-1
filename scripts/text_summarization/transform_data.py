@@ -1,6 +1,12 @@
 import os
+import collections
+import hashlib
+import logging
 import time
 import gluonnlp
+from gluonnlp.data import SpacyTokenizer
+from gluonnlp.data import CorpusDataset
+from gluonnlp.data import count_tokens
 from mxnet.gluon.data import ArrayDataset
 import re
 import codecs
@@ -36,7 +42,7 @@ class TrainValDataTransform(object):
 
     def trans(self, dataset, makevocab = False, vocab = None):
 
-        vocabfile = "data/finished_files_2/my_vocab"
+        vocabfile = "data/finished_files/my_vocab"
         vocab_exit = os.path.isfile(vocabfile)
 
         if makevocab:
@@ -67,6 +73,9 @@ class TrainValDataTransform(object):
         cnt = 0
         t0 = time.time()
         for line in lines:
+            #if cnt == 100:
+             #   break
+
             line = line.strip()
             if not re.search('\t', line):
                 cnt += 1
@@ -110,8 +119,13 @@ class TrainValDataTransform(object):
 
         data = ArrayDataset(art_list,abs_list)
         # print data
-        data_idx = ArrayDataset(np.array(art2idx), np.array(dec_inp_list), np.array(dec_target_list))
+        art2idx = np.array(art2idx)
+        dec_inp_list = np.array(dec_inp_list)
+        dec_target_list = np.array(dec_target_list)
+        print("data_transform", art2idx.shape, dec_inp_list.shape, dec_target_list.shape)
+        data_idx = ArrayDataset(art2idx, dec_inp_list, dec_target_list)
         # print data_idx
+        print("my_vocab_sive:", len(my_vocab))
         return data, data_idx, my_vocab
 
     def get_dec_inp_target_seqs(self, sequence, max_len, start_id, stop_id):

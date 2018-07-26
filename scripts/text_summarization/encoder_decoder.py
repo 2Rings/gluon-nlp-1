@@ -40,7 +40,7 @@ class SUMEncoder(Seq2SeqEncoder):
         super(SUMEncoder, self).__init__(prefix = prefix, params = params)
         self.hidden_size = hidden_size
         with self.name_scope():
-            self.rnn_cells = nn.HybridSequential()
+            self.rnn_cells = rnn.SequentialRNNCell()
             self.rnn_cells.add(rnn.BidirectionalCell(
                 l_cell= rnn.LSTMCell(hidden_size = self.hidden_size,
                 i2h_weight_initializer = i2h_weight_initializer,
@@ -101,7 +101,7 @@ class Seq2SeqDecoder(Block):
         raise NotImplementedError
 
 class SUMDecoder(Seq2SeqDecoder):
-    def __init__(self, cell_type = 'lstm', num_layers = 1, num_bi_layers = 1, hidden_size = 7,
+    def __init__(self, cell_type = 'lstm', num_layers = 1, num_bi_layers = 1, hidden_size = 7, vocab = None,
                 dropout = 0.0, i2h_weight_initializer = None, h2h_weight_initializer = None,
                 i2h_bias_initializer = 'zeros', h2h_bias_initializer = 'zeros',
                 prefix = None, params = None):
@@ -109,7 +109,9 @@ class SUMDecoder(Seq2SeqDecoder):
         self._cell_type = rnn.LSTMCell
         self._num_bi_layers = num_bi_layers
         self._hidden_size = hidden_size
-        self.attention_cell = MLPAttentionCell(units = self._hidden_size, normalized=False, prefix= 'attention_')
+        self.vocab = vocab
+        print("vocab_lenght: ", len(self.vocab))
+        self.attention_cell = MLPAttentionCell(units=2*self._hidden_size, normalized=False, prefix= 'attention_')
         with self.name_scope():
             self._rnn_cells = nn.HybridSequential()
             self._rnn_cells.add(
@@ -127,24 +129,24 @@ class SUMDecoder(Seq2SeqDecoder):
             with self._reduce_cell.name_scope():
                 self._reduce_cell.add(nn.Dense(self._hidden_size,
                                                 activation = 'relu',
-                                                weight_initializer = mx.init.Uniform(0.1),
+                                                weight_initializer = mx.init.Uniform(0.02),
                                                 use_bias = True,
-                                                bias_initializer = mx.init.Uniform(0.1)))
+                                                bias_initializer = mx.init.Uniform(0.02)))
 
         with self.name_scope():
             self.abs_proj = nn.HybridSequential(prefix = 'abs_proj_')
             with self.abs_proj.name_scope():
                 self.abs_proj.add(nn.Dense(self._hidden_size,
                                     # activation = 'relu',
-                                    weight_initializer = mx.init.Uniform(0.1),
+                                    weight_initializer = mx.init.Uniform(0.02),
                                     use_bias = True,
                                     flatten=False,
-                                    bias_initializer = mx.init.Uniform(0.1)))
+                                    bias_initializer = mx.init.Uniform(0.02)))
 
         with self.name_scope():
             self._linear_layer = nn.HybridSequential()
             with self._linear_layer.name_scope():
-                self._linear_layer.add(nn.Dense(960, weight_initializer = mx.init.Uniform(0.1)))
+                self._linear_layer.add(nn.Dense(len(self.vocab), weight_initializer = mx.init.Uniform(0.02)))
 
 
 
@@ -202,7 +204,7 @@ class SUMDecoder(Seq2SeqDecoder):
         inputs = _as_list(mx.nd.split(inputs, num_outputs = length, axis = 1, squeeze_axis = True))
 
         for i in range(length):
-            output_vs, context_vec, attention_dist, rnn_states = self.forward(inputs[i], rnn_states, enc_states)
+            output_vs, context_vec, attention_dist, rnn_states, _ = self.forward(inputs[i], rnn_states, enc_states)
             # #V'(V[st, ht*] + b) + b'
             outputs.append(output_vs)
             context_vec = mx.ndarray.reshape(context_vec, shape = (batch_size, -1))
@@ -214,9 +216,11 @@ class SUMDecoder(Seq2SeqDecoder):
 
 
     def __call__(self, step_input, states):
-        return self.forward(step_input, states)
+        rnn_states = states[0]
+        enc_states = states[1]
+        return self.forward(step_input, rnn_states, enc_states)
 
-    def forward(self, step_input, rnn_states, enc_states):
+    def forward(self, step_input, rnn_states, enc_states = None):
         """
         Input: step_input: shape = (batch_size, embed_dim)
         states: list of state (batch_size, hidden_dim)
@@ -230,21 +234,21 @@ class SUMDecoder(Seq2SeqDecoder):
         returns:
             new_states: list(cell_state, h_state) (batch_size, hidden_dim)
         """
-
         cell_output, new_rnn_states = self._rnn_cells[0](step_input, rnn_states)
-        att_cell_out = mx.ndarray.expand_dims(cell_output, axis = 1)
-        context_vec, attention_dist = self.attention_cell(att_cell_out,enc_states)
-        output_linear = self.abs_proj[0](mx.nd.concat(att_cell_out, context_vec, dim = 2))
+        att_cell_out = mx.ndarray.expand_dims(cell_output, axis=1)
+        context_vec, attention_dist = self.attention_cell(att_cell_out, enc_states)
+        output_linear = self.abs_proj[0](mx.nd.concat(att_cell_out, context_vec, dim=2))
         output_vs = self._linear_layer[0](output_linear)
 
-        return output_vs, context_vec, attention_dist, new_rnn_states
+        return output_vs, context_vec, attention_dist, new_rnn_states, enc_states
 
-def get_summ_encoder_decoder(cell_type = 'lstm', hidden_size = 128, dropout= 0.0,
-                            i2h_weight_initializer = None,
-                            h2h_weight_initializer = None,
-                            i2h_bias_initializer = 'zeros',
-                            h2h_bias_initializer = 'zeros',
-                            prefix = 'Summarization_', params = None):
+
+def get_summ_encoder_decoder(cell_type='lstm', hidden_size=128, vocab = None, dropout=0.0,
+                            i2h_weight_initializer=None,
+                            h2h_weight_initializer=None,
+                            i2h_bias_initializer='zeros',
+                            h2h_bias_initializer='zeros',
+                            prefix='Summarization_', params = None):
     encoder = SUMEncoder(cell_type = cell_type,
                         hidden_size = hidden_size, dropout= dropout,
                         i2h_weight_initializer = i2h_weight_initializer,
@@ -254,7 +258,7 @@ def get_summ_encoder_decoder(cell_type = 'lstm', hidden_size = 128, dropout= 0.0
                         prefix = prefix + 'enc_')
 
     decoder = SUMDecoder(cell_type = cell_type,
-                        hidden_size = hidden_size, dropout= dropout,
+                        hidden_size = hidden_size, vocab = vocab, dropout= dropout,
                         i2h_weight_initializer = i2h_weight_initializer,
                         h2h_weight_initializer = h2h_weight_initializer,
                         i2h_bias_initializer = i2h_bias_initializer,
