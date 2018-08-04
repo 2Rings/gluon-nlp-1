@@ -33,7 +33,7 @@ parser.add_argument('--mode', type = str, default = 'train', help = 'Train/Valid
 parser.add_argument('--experiment_name', type = str, default = 'experiment', help = 'experiment name')
 parser.add_argument('--hidden_dim', type = int, default = 128, help = 'dimension of RNN hidden states')
 parser.add_argument('--embedding_dim', type = int, default = 64, help = 'dimension of word embedding')
-parser.add_argument('--batch_size', type = int, default = 32, help = 'Batch Size')
+parser.add_argument('--batch_size', type = int, default = 8, help = 'Batch Size')
 parser.add_argument('--test_batch_size', type = int, default = 16, help = 'Test Batch Size')
 parser.add_argument('--max_enc_steps', type = int, default = 400, help = 'max timesteps of encoder (max source text tokens)')
 parser.add_argument('--max_dec_steps', type = int, default = 100, help = 'max timesteps of decoder (max summary tokens)')
@@ -47,7 +47,7 @@ parser.add_argument('--num_buckets', type = int, default = 100, help = 'bucket n
 parser.add_argument('--gpu', type = int, default = 1, help = 'id of the gpu to use. Set it to empty means to use cpu.')
 parser.add_argument('--clip', type = float, default = 2.0, help = 'gradient clipping')
 parser.add_argument('--log_interval', type=int, default=100, metavar='N', help='report interval')
-parser.add_argument('--save_dir', type=str, default='out_dir', help='directory path to save the final model and training log')
+parser.add_argument('--save_dir', type=str, default='out_dir_test', help='directory path to save the final model and training log')
 
 args = parser.parse_args()
 
@@ -80,7 +80,7 @@ if args.gpu is None:
 else:
     ctx = mx.gpu(args.gpu)
 
-encoder, decoder = get_summ_encoder_decoder(hidden_size = args.hidden_dim, vocab=my_vocab)
+encoder, decoder = get_summ_encoder_decoder(hidden_size=args.hidden_dim,embedding_size=args.embedding_dim, vocab=my_vocab)
 
 model = SummarizationModel(vocab = my_vocab, encoder = encoder, decoder = decoder, hidden_dim = args.hidden_dim, embed_size = args.embedding_dim, prefix = 'summary_')
 
@@ -177,6 +177,11 @@ def run_train():
 
     print('Batchifying spent {}'.format(time() - t0))
 
+    if os.path.isfile(os.path.join(args.save_dir, 'valid_best.params')):
+        model.load_params(os.path.join(args.save_dir, 'valid_best.params'))
+    else:
+        raise Exception("No valid_best.params")
+
     # print "trianning loop"
     best_loss = 50.0
     for epoch_id in range(args.epochs):
@@ -187,7 +192,15 @@ def run_train():
         log_start_time = time()
         print("epoch_id: {}".format(epoch_id))
         for batch_id, (art_seq, abs_seq, abs_target, art_valid_length, abs_valid_length, target_valid_length) in enumerate(train_data_loader):
+
             print("batch_id: ", epoch_id, batch_id)
+            print('art_seq: ', art_seq[0])
+            print(type(my_vocab))
+            print([my_vocab.idx_to_token[i] for _, i in enumerate(art_seq[0].asnumpy())])
+            print(my_vocab[art_seq[0]])
+            print('art_seq: ', art_seq[1])
+            print([my_vocab.idx_to_token[i] for _, i in enumerate(art_seq[1].asnumpy())])
+            print([my_vocab.idx_to_token[i] for _, i in enumerate(art_seq[2].asnumpy())])
             ts = time()
             art_seq = art_seq.as_in_context(ctx)
             abs_seq = abs_seq.as_in_context(ctx)
@@ -200,28 +213,13 @@ def run_train():
                 '''
                     SoftmaxCELoss()
                 '''
-                # if batch_id < 100:
-                #     print(batch_id)
-                #     print(abs_target)
-                #     print(abs_target.shape)
-                #     print(abs_seq.shape)
-                #     print(art_seq.shape)
-                # if batch_id == 0:
-                #     print(type(abs_target[0]), abs_target.shape)
-                #     print(abs_target[0])
-                #     # show_case = [my_vocab.idx_to_token[int(l)] for l in abs_target[0]]
-                #     print("show_case", show_case)
+
                 decoder_outputs = model(art_seq, abs_seq, art_valid_length, abs_valid_length)
-                # targets = mx.ndarray.one_hot(abs_seq, args.vocab_size)
                 decoder_outputs = mx.ndarray.stack(*decoder_outputs, axis = 1)
                 loss = loss_function(decoder_outputs, abs_target)
-                # print("loss type: ", type(loss), loss)
-                # loss1 = loss.sum()/abs_target.shape[0]
-                # print("loss1 type: ", type(loss1), loss1)
 
                 loss = loss.mean()
 
-                # print("loss type: ", type(loss), loss)
                 loss = loss * abs_target.shape[1] /(target_valid_length).mean()
                 loss.backward()
 
@@ -229,7 +227,6 @@ def run_train():
             gnorm = gluon.utils.clip_global_norm(grads, args.clip)
             trainer.step(1)
             step_loss = loss.asscalar()
-            #running_avg_loss = calc_running_avg_loss(step_loss, running_avg_loss)
             print ("{}: {}: spent {}s and step_loss: {}".format(epoch_id, batch_id, time() - ts, step_loss))
             art_wc = art_valid_length.sum().asscalar()
             abs_wc = (abs_valid_length).sum().asscalar()
