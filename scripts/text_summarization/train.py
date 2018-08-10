@@ -1,9 +1,5 @@
 import os
 import sys
-curPath = os.path.abspath(os.path.dirname(__file__))
-rootPath = os.path.split(curPath)[0]
-sys.path.append(rootPath)
-sys.path.append("/search/hui/gluon-nlp-1")
 import io
 from time import time
 import argparse
@@ -19,7 +15,6 @@ from transform_data import TrainValDataTransform
 import gluonnlp.data.batchify as btf
 from encoder_decoder import get_summ_encoder_decoder
 from summarization import SummarizationModel
-    # , SoftmaxCrossEntropyMaskedLoss
 from summarization import BeamSearchSummarizer
 from gluonnlp.model import BeamSearchSampler, BeamSearchScorer
 from mxnet import gluon
@@ -45,7 +40,7 @@ parser.add_argument('--optimizer', type = str, default = 'AdaGrad', help = 'Opti
 parser.add_argument('--lr', type = float, default = 0.15, help = 'Learning rate')
 parser.add_argument('--bucket_ratio', type = float, default = 0.0, help = 'bucket_ratio')
 parser.add_argument('--num_buckets', type = int, default = 100, help = 'bucket number')
-parser.add_argument('--gpu', type = int, default = 1, help = 'id of the gpu to use. Set it to empty means to use cpu.')
+parser.add_argument('--gpu', type = int, default = None, help = 'id of the gpu to use. Set it to empty means to use cpu.')
 parser.add_argument('--clip', type = float, default = 2.0, help = 'gradient clipping')
 parser.add_argument('--log_interval', type=int, default=100, metavar='N', help='report interval')
 parser.add_argument('--save_dir', type=str, default='out_dir_test', help='directory path to save the final model and training log')
@@ -66,24 +61,27 @@ rouge_dec_dir = os.path.join(decode_dir, 'decoded')
 data_transform = TrainValDataTransform(max_enc_steps= args.max_enc_steps, max_dec_steps= args.max_dec_steps)
 
 t0 = time()
+train_save = data_transform(dataset = train_path, makevocab = True)
+val_save = data_transform(dataset = val_path, vocab = train_save[2])
+test_save = data_transform(dataset = test_path, vocab = train_save[2])
 
-with open('train_save.pkl', 'rb') as ft:
-    train_save = pickle.load(ft)
+# ft = open('train_save.pkl', 'wb')
+# pickle.dump(train_save, ft, -1)
+# ft.close()
+#
+# fv = open('val_save.pkl', 'wb')
+# pickle.dump(val_save, fv, -1)
+# fv.close()
+#
+# ftest = open('test_save.pkl', 'wb')
+# pickle.dump(test_save, ftest, -1)
+# ftest.close()
 
-t1 = time()
-print("load data spent {}".format(t1-t0))
-with open('val_save.pkl', 'rb') as fv:
-    val_save = pickle.load(fv)
-
-with open('test_save.pkl', 'rb') as ftest:
-    test_save = pickle.load(ftest)
+logging.info('Processing data spent {}'.format(time() - t0))
 
 train_data_ori, train_data2idx, my_vocab = train_save
 val_data_ori, val_data2idx, _ = val_save
 test_data_ori, test_data2idx, _ = test_save
-
-print("my_vocab: ", type(my_vocab))
-logging.info('Processing data spent {}'.format(time() - t0))
 
 data_train_lengths = [(len(ele[0]), len(ele[1])) for i, ele in enumerate(train_data_ori)]
 data_val_lengths = [(len(ele[0]), len(ele[1])) for i, ele in enumerate(val_data_ori)]

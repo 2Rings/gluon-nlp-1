@@ -62,8 +62,6 @@ class Pointer_Generator_Decoder(Block):
         self.vocab = vocab
         self._embedding_size = embedding_size
 
-        print("vocab_lenght: ", len(self.vocab))
-        # self.dec_lstm = nn.HybridSequential(prefix='dec_lstm')
         self._reduce_cell_c = nn.HybridSequential(prefix='reduce_cell_c')
         self._reduce_cell_h = nn.HybridSequential(prefix='reduce_cell_h')
 
@@ -80,7 +78,7 @@ class Pointer_Generator_Decoder(Block):
                                         i2h_bias_initializer = i2h_bias_initializer,
                                         h2h_bias_initializer = h2h_bias_initializer))
 
-            # self.attention_cell = MLPAttentionCell(units=2 * self._hidden_size, normalized=False, prefix='attention_')
+            self.attention_cell = MLPAttentionCell(units=2 * self._hidden_size, normalized=False, prefix='attention_')
 
             self._reduce_cell_c.add(nn.Dense(self._hidden_size,
                                             activation = 'relu',
@@ -94,11 +92,11 @@ class Pointer_Generator_Decoder(Block):
                                             use_bias = True,
                                             bias_initializer = mx.init.Uniform(0.02)))
 
-            # self.dec_out_linear.add(nn.Dense(2*self._hidden_size,
-            #                                  weight_initializer=mx.init.Uniform(0.02),
-            #                                  use_bias=True,
-            #                                  bias_initializer=mx.init.Uniform(0.02)))
-            #
+            self.dec_out_linear.add(nn.Dense(2*self._hidden_size,
+                                             weight_initializer=mx.init.Uniform(0.02),
+                                             use_bias=True,
+                                             bias_initializer=mx.init.Uniform(0.02)))
+
             self.abs_proj.add(nn.Dense(self._hidden_size,
                                             weight_initializer = mx.init.Uniform(0.02),
                                             use_bias = True,
@@ -107,7 +105,7 @@ class Pointer_Generator_Decoder(Block):
 
             self._linear_layer.add(nn.Dense(len(self.vocab), weight_initializer = mx.init.Uniform(0.02)))
 
-            # self.dec_linear.add(nn.Dense(self._embedding_size, weight_initializer = mx.init.Uniform(0.02)))
+            self.dec_linear.add(nn.Dense(self._embedding_size, weight_initializer = mx.init.Uniform(0.02)))
 
     def reduce_states(self, rnn_states = None):
         l_state, r_state = rnn_states
@@ -140,8 +138,8 @@ class Pointer_Generator_Decoder(Block):
             output_vs, context_vec, attention_dist, rnn_states, _ = self.forward(inputs[i], rnn_states, enc_states, max_enc_outputs)
             # #V'(V[st, ht*] + b) + b'
             outputs.append(output_vs)
-            # context_vec = mx.ndarray.reshape(context_vec, shape = (batch_size, -1))
-            # attention_dist = mx.ndarray.reshape(attention_dist, shape = (batch_size, -1))
+            context_vec = mx.ndarray.reshape(context_vec, shape = (batch_size, -1))
+            attention_dist = mx.ndarray.reshape(attention_dist, shape = (batch_size, -1))
             context_vecs.append(context_vec)
             attention_dists.append(attention_dist)
 
@@ -154,34 +152,27 @@ class Pointer_Generator_Decoder(Block):
         return self.forward(step_input, rnn_states, enc_states)
 
     def forward(self, step_input, rnn_states, enc_states=None, max_enc_outputs=None):
-        # dec_state = mx.nd.concat(rnn_states[0], rnn_states[1], dim=1)
-        # dec_state = self.dec_out_linear[0](dec_state)
-        # print(rnn_states[0].shape, rnn_states[1].shape, dec_state.shape)
-        # batch_size = step_input.shape[0]
-        # # print("dec_state: ", dec_state.shape)
-        # dec_state = mx.ndarray.expand_dims(dec_state, axis=1)
-        # # print("dec_state: ", dec_state.shape)
-        # context_vec, attention_dist = self.attention_cell(dec_state, enc_states)
-        # context_vec_inp = mx.ndarray.reshape(context_vec, shape=(batch_size, -1))
-        # step_input = mx.nd.concat(step_input, context_vec_inp, dim=1)
-        # step_input = self.dec_linear[0](step_input)
-        # cell_output, new_rnn_states = self.dec_lstm[0](step_input, rnn_states)
-        # attn_cell_out = mx.ndarray.expand_dims(cell_output, axis=1)
-        # output_linear = self.abs_proj[0](mx.nd.concat(attn_cell_out, context_vec, dim=2))
-        # output_vs = self._linear_layer[0](output_linear)
-
-        # input_1 = mx.ndarray.concat()
-
+        # attention_decoder
+        dec_state = mx.nd.concat(rnn_states[0], rnn_states[1], dim=1)
+        dec_state = self.dec_out_linear[0](dec_state)
+        batch_size = step_input.shape[0]
+        dec_state = mx.ndarray.expand_dims(dec_state, axis=1)
+        context_vec, attention_dist = self.attention_cell(dec_state, enc_states)
+        context_vec_inp = mx.ndarray.reshape(context_vec, shape=(batch_size, -1))
+        step_input = mx.nd.concat(step_input, context_vec_inp, dim=1)
+        step_input = self.dec_linear[0](step_input)
         cell_output, new_rnn_states = self.dec_lstm[0](step_input, rnn_states)
-        output_vs = self.abs_proj[0](cell_output)
-        output_vs = self._linear_layer[0](output_vs)
-        context_vec = None
-        attention_dist = None
-        # att_cell_out = mx.ndarray.expand_dims(cell_output, axis=1)
-        # context_vec, attention_dist = self.attention_cell(att_cell_out, enc_states)
-        # output_linear = self.abs_proj[0](mx.nd.concat(att_cell_out, context_vec, dim=2))
-        # output_vs = self._linear_layer[0](output_linear)
-        # output_vs = mx.ndarray.softmax(output_vs)
+        attn_cell_out = mx.ndarray.expand_dims(cell_output, axis=1)
+        output_linear = self.abs_proj[0](mx.nd.concat(attn_cell_out, context_vec, dim=2))
+        output_vs = self._linear_layer[0](output_linear)
+
+        # decoder
+        # cell_output, new_rnn_states = self.dec_lstm[0](step_input, rnn_states)
+        # output_vs = self.abs_proj[0](cell_output)
+        # output_vs = self._linear_layer[0](output_vs)
+        # context_vec = None
+        # attention_dist = None
+
         return output_vs, context_vec, attention_dist, new_rnn_states, enc_states
 
 
